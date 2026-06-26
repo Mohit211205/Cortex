@@ -109,6 +109,15 @@ class HNSWIndex:
     def __len__(self) -> int:
         return len(self.nodes)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        del state["_lock"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
+
     def save(self, path: str):
         with open(path, "wb") as f:
             pickle.dump(self, f)
