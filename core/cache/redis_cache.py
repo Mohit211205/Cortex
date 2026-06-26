@@ -17,6 +17,8 @@ from core.config import settings
 
 
 def get_redis() -> redis.Redis:
+    if settings.REDIS_URL:
+        return redis.Redis.from_url(settings.REDIS_URL, db=0, decode_responses=True)
     return redis.Redis(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
