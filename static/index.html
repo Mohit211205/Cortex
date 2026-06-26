@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cortex — Semantic Code Search</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+
+    header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 22px; color: #58a6ff; font-weight: 700; }
+    header span { font-size: 13px; color: #8b949e; }
+
+    .container { max-width: 860px; margin: 60px auto; padding: 0 24px; }
+
+    .tagline { text-align: center; margin-bottom: 40px; }
+    .tagline h2 { font-size: 32px; color: #f0f6fc; margin-bottom: 10px; }
+    .tagline p { color: #8b949e; font-size: 15px; }
+
+    .search-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .search-box input {
+      flex: 1;
+      padding: 12px 16px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      color: #f0f6fc;
+      font-size: 15px;
+      outline: none;
+      transition: border 0.2s;
+    }
+    .search-box input:focus { border-color: #58a6ff; }
+    .search-box button {
+      padding: 12px 24px;
+      background: #238636;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    .search-box button:hover { background: #2ea043; }
+
+    .auth-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 32px;
+      font-size: 13px;
+      color: #8b949e;
+      align-items: center;
+    }
+    .auth-row input {
+      padding: 8px 12px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: #f0f6fc;
+      font-size: 13px;
+      outline: none;
+      width: 180px;
+    }
+    .auth-row button {
+      padding: 8px 14px;
+      background: #21262d;
+      color: #c9d1d9;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .auth-row button:hover { background: #30363d; }
+    #auth-status { color: #3fb950; font-size: 13px; }
+
+    .results { display: flex; flex-direction: column; gap: 16px; }
+
+    .result-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      padding: 16px 20px;
+      transition: border 0.2s;
+    }
+    .result-card:hover { border-color: #58a6ff; }
+    .result-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .result-path { font-size: 13px; color: #58a6ff; font-family: monospace; }
+    .result-score {
+      font-size: 12px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      padding: 2px 8px;
+      border-radius: 20px;
+      color: #3fb950;
+    }
+    .result-lang {
+      font-size: 11px;
+      color: #8b949e;
+      margin-bottom: 8px;
+    }
+    .result-code {
+      background: #0d1117;
+      border-radius: 6px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      overflow-x: auto;
+      white-space: pre;
+      color: #e6edf3;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .latency { font-size: 12px; color: #8b949e; margin-bottom: 16px; }
+    .cached-badge {
+      font-size: 11px;
+      background: #1f3a1f;
+      color: #3fb950;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-left: 8px;
+    }
+    #error { color: #f85149; font-size: 14px; margin-bottom: 12px; }
+    .empty { text-align: center; color: #8b949e; padding: 40px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ Cortex</h1>
+  <span>Semantic Code Search Engine</span>
+</header>
+
+<div class="container">
+  <div class="tagline">
+    <h2>Search code by meaning, not keywords</h2>
+    <p>Powered by CodeBERT embeddings + custom HNSW vector index</p>
+  </div>
+
+  <!-- Auth -->
+  <div class="auth-row">
+    <input id="email" type="email" placeholder="email" />
+    <input id="password" type="password" placeholder="password" />
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+    <span id="auth-status"></span>
+  </div>
+
+  <!-- Search -->
+  <div class="search-box">
+    <input id="query" type="text" placeholder="e.g. binary search implementation, quicksort, hash table..." />
+    <button onclick="search()">Search</button>
+  </div>
+
+  <div id="error"></div>
+  <div id="latency" class="latency"></div>
+  <div id="results" class="results"></div>
+</div>
+
+<script>
+  const API = '';
+  let token = localStorage.getItem('cortex_token') || '';
+  if (token) document.getElementById('auth-status').textContent = '✓ Logged in';
+
+  async function register() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const r = await fetch(`${API}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await r.json();
+    if (r.ok) {
+      token = data.access_token;
+      localStorage.setItem('cortex_token', token);
+      document.getElementById('auth-status').textContent = '✓ Registered & logged in';
+    } else {
+      document.getElementById('error').textContent = data.detail || 'Registration failed';
+    }
+  }
+
+  async function login() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const r = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await r.json();
+    if (r.ok) {
+      token = data.access_token;
+      localStorage.setItem('cortex_token', token);
+      document.getElementById('auth-status').textContent = '✓ Logged in';
+    } else {
+      document.getElementById('error').textContent = data.detail || 'Login failed';
+    }
+  }
+
+  async function search() {
+    const query = document.getElementById('query').value.trim();
+    if (!query) return;
+    if (!token) {
+      document.getElementById('error').textContent = 'Please login first.';
+      return;
+    }
+    document.getElementById('error').textContent = '';
+    document.getElementById('results').innerHTML = '<div class="empty">Searching...</div>';
+
+    const r = await fetch(`${API}/search?query=${encodeURIComponent(query)}&k=10`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await r.json();
+
+    if (!r.ok) {
+      document.getElementById('error').textContent = data.detail || 'Search failed';
+      document.getElementById('results').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('latency').innerHTML =
+      `${data.results.length} results in ${data.latency_ms}ms` +
+      (data.cached ? '<span class="cached-badge">cached</span>' : '');
+
+    if (data.results.length === 0) {
+      document.getElementById('results').innerHTML = '<div class="empty">No results found. Try indexing a repository first.</div>';
+      return;
+    }
+
+    document.getElementById('results').innerHTML = data.results.map(r => `
+      <div class="result-card">
+        <div class="result-meta">
+          <span class="result-path">${r.file_path}</span>
+          <span class="result-score">score: ${r.score}</span>
+        </div>
+        <div class="result-lang">Lines ${r.start_line}–${r.end_line} · ${r.language}</div>
+        <div class="result-code">${escapeHtml(r.content)}</div>
+      </div>
+    `).join('');
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  document.getElementById('query').addEventListener('keydown', e => {
+    if (e.key === 'Enter') search();
+  });
+</script>
+</body>
+</html>
