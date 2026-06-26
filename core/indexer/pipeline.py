@@ -4,7 +4,7 @@ Indexing pipeline:
 2. Walk all code files
 3. Chunk each file (AST-based for Python, sliding window for others)
 4. Embed each chunk via CodeBERT
-5. Insert into HNSW index
+5. Insert into HNSW index via core.state
 6. Persist chunk metadata to PostgreSQL
 7. Update repo status
 """
@@ -19,7 +19,9 @@ from pathlib import Path
 
 from sqlalchemy import update
 
-from core.embeddings import get_embedder, chunk_file, chunk_hash
+import core.state as state
+from core.embeddings import get_embedder, chunk_file
+from core.config import settings
 from db.models import CodeChunk, Repository
 from db.session import AsyncSessionLocal
 
@@ -30,7 +32,6 @@ MAX_FILE_SIZE_KB = 500
 class IndexingPipeline:
     async def run(self, repo_id: str, github_url: str):
         async with AsyncSessionLocal() as db:
-            # Mark as indexing
             await db.execute(
                 update(Repository).where(Repository.id == repo_id).values(status="indexing")
             )
@@ -66,10 +67,8 @@ class IndexingPipeline:
         )
 
     async def _index_directory(self, repo_id: str, directory: str):
-        from api.main import hnsw_index
-
         embedder = get_embedder()
-        node_id_counter = len(hnsw_index)
+        node_id_counter = len(state.hnsw_index)
 
         async with AsyncSessionLocal() as db:
             for root, _, files in os.walk(directory):
@@ -95,7 +94,7 @@ class IndexingPipeline:
                         node_id = node_id_counter
                         node_id_counter += 1
 
-                        hnsw_index.add(node_id, embedding)
+                        state.hnsw_index.add(node_id, embedding)
 
                         db_chunk = CodeChunk(
                             repo_id=repo_id,
@@ -112,6 +111,5 @@ class IndexingPipeline:
             await db.commit()
 
         # Persist updated HNSW index to disk
-        from core.config import settings
         os.makedirs(os.path.dirname(settings.HNSW_INDEX_PATH), exist_ok=True)
-        hnsw_index.save(settings.HNSW_INDEX_PATH)
+        state.hnsw_index.save(settings.HNSW_INDEX_PATH)

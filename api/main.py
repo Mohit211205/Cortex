@@ -10,32 +10,28 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from core.config import settings
 from core.hnsw import HNSWIndex
 from core.embeddings import CodeBERTEmbedder
+import core.state as state
 from db.models import Base
 from db.session import engine
-
-# Global HNSW index — loaded at startup, shared across requests
-hnsw_index: HNSWIndex = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global hnsw_index
-
     # Create DB tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Load or create HNSW index
+    # Load or create HNSW index into shared state
     if os.path.exists(settings.HNSW_INDEX_PATH):
-        hnsw_index = HNSWIndex.load(settings.HNSW_INDEX_PATH)
+        state.hnsw_index = HNSWIndex.load(settings.HNSW_INDEX_PATH)
     else:
-        hnsw_index = HNSWIndex(dim=CodeBERTEmbedder.DIM)
+        state.hnsw_index = HNSWIndex(dim=CodeBERTEmbedder.DIM)
 
     yield
 
     # Persist index on shutdown
     os.makedirs(os.path.dirname(settings.HNSW_INDEX_PATH), exist_ok=True)
-    hnsw_index.save(settings.HNSW_INDEX_PATH)
+    state.hnsw_index.save(settings.HNSW_INDEX_PATH)
 
 
 app = FastAPI(
@@ -68,7 +64,7 @@ app.include_router(ingest.router)
 async def health():
     return {
         "status": "ok",
-        "index_size": len(hnsw_index) if hnsw_index else 0,
+        "index_size": len(state.hnsw_index) if state.hnsw_index else 0,
     }
 
 

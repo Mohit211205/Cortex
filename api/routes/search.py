@@ -1,5 +1,5 @@
 import time
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -9,18 +9,13 @@ from sqlalchemy import select
 from api.dependencies import get_current_user, rate_limit
 from core.cache import QueryCache
 from core.embeddings import get_embedder
-from core.hnsw import HNSWIndex
+import core.state as state
 from db.session import get_db
 from db.models import CodeChunk, SearchLog, User
 
 router = APIRouter(prefix="/search", tags=["search"])
 
 _cache = QueryCache()
-
-
-def get_index() -> HNSWIndex:
-    from api.main import hnsw_index
-    return hnsw_index
 
 
 class SearchResult(BaseModel):
@@ -61,8 +56,7 @@ async def semantic_search(
     query_vec = embedder.embed(query)
 
     # Search HNSW index
-    index = get_index()
-    hits = index.search(query_vec, k=k)
+    hits = state.hnsw_index.search(query_vec, k=k)
 
     # Fetch chunk metadata from DB
     results = []
@@ -115,6 +109,11 @@ async def search_history(
     )
     logs = result.scalars().all()
     return [
-        {"query": l.query, "latency_ms": l.latency_ms, "result_count": l.result_count, "created_at": l.created_at}
+        {
+            "query": l.query,
+            "latency_ms": l.latency_ms,
+            "result_count": l.result_count,
+            "created_at": l.created_at,
+        }
         for l in logs
     ]
